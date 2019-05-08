@@ -16,6 +16,7 @@ AUTHOR: John Brichetto
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strconv"
 	"time"
@@ -35,7 +36,7 @@ const eloSpread float64 = 400.00
 const eloWeight float64 = 32.00
 
 // output related constants
-const displayAllPlayers bool = false
+const displayAllPlayers bool = true
 const displaySummary bool = false
 
 type player struct {
@@ -55,6 +56,25 @@ func playerConstructor(inputName string) player {
 	return p
 }
 
+func playerRemove(p []player, i int) []player {
+	p[i] = p[len(p)-1]
+	return p[:len(p)-1]
+}
+
+func stdDev(nums ...float64) (float64, float64) {
+	sum := 0.00
+	for _, num := range nums {
+		sum += num
+	}
+	average := sum / float64(len(nums))
+	var sD float64
+	for _, num := range nums {
+		sD += math.Pow((num - average), 2)
+	}
+	sD = math.Sqrt(sD / float64(len(nums)))
+	return average, sD
+}
+
 func main() {
 	// begin timing
 	startTime := time.Now()
@@ -64,27 +84,106 @@ func main() {
 	}()
 
 	//create player pool
-	playerPool := make([]player, totalPlayers, totalPlayers)
+	playerPool := make([]player, totalPlayers, totalPlayers+1)
 	for i := 0; i < totalPlayers; i++ {
 		playerPool[i] = playerConstructor("p" + strconv.Itoa(i))
-		fmt.Println(playerPool[i])
 	}
 
-	/*
-		// create player pool
-		playerPool := make(map[int]player, totalPlayers)
-		for i := 0; i < totalPlayers; i++ {
-			playerPool[i] = playerConstructor("p" + strconv.Itoa(i))
+	// simulate games
+	for gameCounter := 0; gameCounter < totalGamesPlayed; gameCounter++ {
+
+		// create and fill teams
+		team1 := make([]player, 0, teamSize)
+		for i := 0; i < teamSize; i++ {
+			randomPlayerID := rand.Intn(len(playerPool))
+			team1 = append(team1, playerPool[randomPlayerID])
+			playerPool = playerRemove(playerPool, randomPlayerID)
 		}
-	*/
+		team2 := make([]player, 0, teamSize)
+		for i := 0; i < teamSize; i++ {
+			randomPlayerID := rand.Intn(len(playerPool))
+			team2 = append(team2, playerPool[randomPlayerID])
+			playerPool = playerRemove(playerPool, randomPlayerID)
+		}
+		// calculate the team's average Elo and determine which team is more skilled
+		team1AvgElo, team2AvgElo := 0.00, 0.00
+		team1Skill, team2Skill := 0, 0
+		for i := 0; i < teamSize; i++ {
+			team1AvgElo = team1AvgElo + team1[i].elo
+			team1Skill += team1[i].skill
+			team2AvgElo = team2AvgElo + team2[i].elo
+			team2Skill += team2[i].skill
+		}
+		team1AvgElo /= float64(teamSize)
+		team2AvgElo /= float64(teamSize)
 
-	// copy delete and append from the map
-	// check if key is present with _, prs := m["k2"] syntax
+		// determine game winner by team's total skill
+		var team1Win float64
+		if team1Skill > team2Skill {
+			team1Win = 1.00
+		} else if team1Skill == team2Skill {
+			team1Win = 0.50
+		} else {
+			team1Win = 0.00
+		}
 
-	// create and fill teams
-	team1 := make([]player, teamSize, teamSize)
-	team2 := make([]player, teamSize, teamSize)
+		// calculations
+		r1 := math.Pow(10, team1AvgElo/eloSpread)
+		r2 := math.Pow(10, team2AvgElo/eloSpread)
 
-	fmt.Println(team1, len(team1), cap(team1))
-	fmt.Println(team2, len(team2), cap(team2))
+		team1WinProbability := r1 / (r1 + r2)
+		team2WinProbability := r2 / (r1 + r2)
+
+		// if team 1 wins, this creates a positive number (elo gain)
+		team1EloChange := eloWeight * (team1Win - team1WinProbability)
+		// if team 1 wins, this creates a negative number (elo loss)
+		team2EloChange := eloWeight * (math.Abs(team1Win-1.00) - team2WinProbability)
+
+		// update elo score and games played for each player and return to playerPool
+		for i := (teamSize - 1); i >= 0; i-- {
+			team1[i].elo += team1EloChange
+			team1[i].gamesPlayed++
+			playerPool = append(playerPool, team1[i])
+			team1 = playerRemove(team1, i)
+			team2[i].elo += team2EloChange
+			team2[i].gamesPlayed++
+			playerPool = append(playerPool, team2[i])
+			team2 = playerRemove(team2, i)
+		}
+	}
+
+	// organize the player pool
+	sortedPlayerPool := make([]player, 0, totalPlayers)
+	if displayAllPlayers {
+		for j := 0; j <= maxSkillLevel; j++ {
+			for k := 0; k < len(playerPool); k++ {
+				if playerPool[k].skill == (maxSkillLevel - j) {
+					sortedPlayerPool = append(sortedPlayerPool, playerPool[k])
+					playerPool = playerRemove(playerPool, k)
+					k--
+				}
+			}
+		}
+
+		//display the sorted player pool
+		for i := 0; i < len(sortedPlayerPool); i++ {
+			fmt.Println(sortedPlayerPool[i])
+		}
+	}
+	// JOHN REDO THIS SECTION WITH YOUR FANCY NEW FUNCTION
+	// summarize the data - step 1 calculate average elo for each skill level
+	for j := 0; j <= maxSkillLevel; j++ {
+		avgEloThisSkillLevel := 0.00
+		playersThisSkillLevel := 0
+		for k := 0; k < len(sortedPlayerPool); k++ {
+			if sortedPlayerPool[k].skill == (maxSkillLevel - j) {
+				avgEloThisSkillLevel += sortedPlayerPool[k].elo
+				playersThisSkillLevel++
+			}
+		}
+		avgEloThisSkillLevel /= float64(playersThisSkillLevel)
+		// summarize data - step 2 calculate standard deviation for each skill level
+
+	}
+
 }
