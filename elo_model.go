@@ -36,8 +36,8 @@ const eloSpread float64 = 400.00
 const eloWeight float64 = 32.00
 
 // output related constants
-const displayAllPlayers bool = true
-const displaySummary bool = false
+const displayAllPlayers bool = false
+const displaySummary bool = true
 
 type player struct {
 	name        string
@@ -154,36 +154,47 @@ func main() {
 
 	// organize the player pool
 	sortedPlayerPool := make([]player, 0, totalPlayers)
-	if displayAllPlayers {
-		for j := 0; j <= maxSkillLevel; j++ {
-			for k := 0; k < len(playerPool); k++ {
-				if playerPool[k].skill == (maxSkillLevel - j) {
-					sortedPlayerPool = append(sortedPlayerPool, playerPool[k])
-					playerPool = playerRemove(playerPool, k)
-					k--
-				}
+	for j := 0; j <= maxSkillLevel; j++ {
+		for k := 0; k < len(playerPool); k++ {
+			if playerPool[k].skill == (maxSkillLevel - j) {
+				sortedPlayerPool = append(sortedPlayerPool, playerPool[k])
+				playerPool = playerRemove(playerPool, k)
+				k--
 			}
 		}
+	}
 
-		//display the sorted player pool
+	//display the sorted player pool
+	if displayAllPlayers {
 		for i := 0; i < len(sortedPlayerPool); i++ {
 			fmt.Println(sortedPlayerPool[i])
 		}
 	}
-	// JOHN REDO THIS SECTION WITH YOUR FANCY NEW FUNCTION
-	// summarize the data - step 1 calculate average elo for each skill level
-	for j := 0; j <= maxSkillLevel; j++ {
-		avgEloThisSkillLevel := 0.00
-		playersThisSkillLevel := 0
-		for k := 0; k < len(sortedPlayerPool); k++ {
-			if sortedPlayerPool[k].skill == (maxSkillLevel - j) {
-				avgEloThisSkillLevel += sortedPlayerPool[k].elo
-				playersThisSkillLevel++
+
+	// summarize the data - calculate relevant statistical data for each skill level
+	if displaySummary {
+		for j := 0; j <= maxSkillLevel; j++ {
+			eloScoresThisSkillLevel := make([]float64, 0, totalPlayers)
+			maxVal := 0.00
+			minVal := 1000000.00
+			for len(sortedPlayerPool) != 0 {
+				if sortedPlayerPool[0].skill == (maxSkillLevel - j) {
+					eloScoresThisSkillLevel = append(eloScoresThisSkillLevel, sortedPlayerPool[0].elo)
+					maxVal = math.Max(maxVal, sortedPlayerPool[0].elo)
+					minVal = math.Min(minVal, sortedPlayerPool[0].elo)
+					sortedPlayerPool = sortedPlayerPool[1:]
+				} else {
+					avg, sD := stdDev(eloScoresThisSkillLevel...)
+					fmt.Println("Skill Level:", maxSkillLevel-j, "\tNumber of Players:", len(eloScoresThisSkillLevel), "\tAverage elo:", avg, "\tStandard Deviation:", sD,
+						"\tMax elo:", maxVal, "\tMinimum elo:", minVal)
+					break
+				}
+			}
+			if len(sortedPlayerPool) == 0 {
+				avg, sD := stdDev(eloScoresThisSkillLevel...)
+				fmt.Println("Skill Level:", maxSkillLevel-j, "\tNumber of Players:", len(eloScoresThisSkillLevel), "\tAverage elo:", avg, "\tStandard Deviation:", sD,
+					"\tMax elo:", maxVal, "\tMinimum elo:", minVal)
 			}
 		}
-		avgEloThisSkillLevel /= float64(playersThisSkillLevel)
-		// summarize data - step 2 calculate standard deviation for each skill level
-
 	}
-
 }
